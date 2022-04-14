@@ -80,7 +80,7 @@ defmodule SurfaceError.MixProject do
       {:phoenix_live_reload, "~> 1.3"},
       {:phoenix_live_view, "~> 0.17.6"},
       {:plug_cowboy, "~> 2.5.2"},
-      {:surface, "0.7.0", override: true},
+      {:surface, "~> 0.7.3", override: true},
       {:tailwind, "~> 0.1.5", runtime: Mix.env() == :dev},
       {:floki, ">= 0.30.0", only: :test}
     ]
