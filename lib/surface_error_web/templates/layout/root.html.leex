@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <%= render "_favicon_meta_link.html", assigns %>
+    <%= render "_description_meta_tag.html", assigns %>
+    <%= csrf_meta_tag() %>
+    <%= live_title_tag assigns[:page_title] || "SurfaceError | The Ultimate CRE Broker Technology", suffix: " · surface_error.co" %>
+    <link phx-track-static rel="stylesheet" href="<%= Routes.static_url(@conn, "/assets/app.css") %>"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script defer phx-track-static type="text/javascript" src="<%= Routes.static_url(@conn, "/assets/app.js") %>"></script>
+    <!-- not needed for now -->
+    <!-- <script src="https://js.stripe.com/v3/"></script> -->
+    <%= if token = assigns[:unconfirmed_user_token] do %>
+      <script>window.unconfirmedUserToken = "<%= token %>";</script>
+    <% end %>
+    <%= if Application.get_env(:surface_error, :helpscout_enabled) do %>
+      <script type="text/javascript">!function(e,t,n){function a(){var e=t.getElementsByTagName("script")[0],n=t.createElement("script");n.type="text/javascript",n.async=!0,n.src="https://beacon-v2.helpscout.net",e.parentNode.insertBefore(n,e)}if(e.Beacon=n=function(t,n,a){e.Beacon.readyQueue.push({method:t,options:n,data:a})},n.readyQueue=[],"complete"===t.readyState)return a();e.attachEvent?e.attachEvent("onload",a):e.addEventListener("load",a,!1)}(window,document,window.Beacon||function(){});</script>
+      <script type="text/javascript">window.Beacon('init', '7c736f2a-845c-4db0-9fe1-ff5e6d126cc0')</script>
+    <% end %>
+  </head>
+  <%= content_tag :body do %>
+    <%= @inner_content %>
+  <% end %>
+</html>

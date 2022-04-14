@@ -1,0 +1,1 @@
+call "%~dp0\surface_error" eval SurfaceError.Release.migrate

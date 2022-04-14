@@ -1,0 +1,13 @@
+  <meta name="msapplication-TileColor" content="#2b5797"></meta>
+  <meta name="msapplication-TileImage" content="/favicons/144x144_transparent.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="icon" type="image/png" href="/favicons/16x16_transparent.png" sizes="16x16">
+  <link rel="icon" type="image/png" href="/favicons/32x32_transparent.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="/favicons/48x48_transparent.png" sizes="48x48">
+  <link rel="apple-touch-icon" sizes="60x60" href="/favicons/60x60_solid.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/favicons/120x120_solid.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/favicons/152x152_solid.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/favicons/167x167_solid.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicons/180x180_solid.png">
+  <link rel="apple-touch-icon" sizes="1024x1024" href="/favicons/1024x1024_solid.png">
+  <link rel="mask-icon" href="/favicons/surface_error_logo_square.svg" color="blue">

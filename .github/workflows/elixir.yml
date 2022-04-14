@@ -1,0 +1,224 @@
+name: Surface Error CI
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        otp: [24.2.1]
+        elixir: [1.13.3]
+
+    services:
+      postgres:
+        image: postgres
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SURFACE_ERROR_CLOUDFRONT_KEY_PAIR_ID: ${{ secrets.SURFACE_ERROR_CLOUDFRONT_KEY_PAIR_ID }}
+      SURFACE_ERROR_CLOUDFRONT_PRIVATE_KEY: ${{ secrets.SURFACE_ERROR_CLOUDFRONT_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Copy env.sample
+        run: |
+          cp .env.sample .env
+          mkdir screenshots
+
+      - name: Install Elixir
+        id: setup-beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      # Why wish to cache the following folders:
+      # - deps/: To avoid having to redownload the source packages every time
+      # - _build/: To avoid having to compile the deps and the project every time
+      # - _build/**/*.plt: To avoid having to regenerate the plts when running dialyzer
+      # We should be busting the cache when:
+      # - We add/remove/update packages (`hashFiles('/mix.lock')`)
+      # - We change OTP or elixir versions
+      # - We manually bust the cache with CACHE_VERSION
+      - name: Restore dependencies and build cache
+        uses: actions/cache@v2
+        id: build_cache
+        with:
+          # For some reason `hashFiles('**/mix.lock') always returns an empty string
+          # (instead of the hash), this may be because the glob **/mix.lock only searches
+          # in the subfolders and not the project root dir (?). So we use `mix.lock` instead
+          key: |
+            ${{ secrets.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+          # Let's try to disable this for now to only have a cache hit when there's an exact match:
+          # restore-keys: |
+          #   ${{ secrets.CACHE_VERSION }}-${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-
+          path: |
+            _build
+            deps
+            # The following won't work, since we're putting the plts in `_build`, not `priv`, see `mix.exs`.
+            # priv/plts
+
+      # The three following steps should be skipped if there's a cache hit
+      - name: Install Dependencies
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        run: mix deps.get
+
+      - name: Compile
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        run: mix compile
+
+      - name: Create PLTs
+        if: steps.build_cache.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+
+      - name: Run checks
+        run: |
+          set +e
+          mix check
+
+      - name: Test migration can be rolled back
+        run: MIX_ENV=test mix ecto.rollback --to 20210409102847
+
+      - name: Upload coverage
+        run: bash <(curl -s https://codecov.io/bash) -t ae772f5f-3c84-43fd-b110-12046e412d75
+
+  int_test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MIX_ENV: int_test
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # For integration tests
+      SURFACE_ERROR_AWS_ACCESS_KEY_ID: ${{ secrets.SURFACE_ERROR_AWS_ACCESS_KEY_ID }}
+      SURFACE_ERROR_AWS_REGION: ${{ secrets.SURFACE_ERROR_AWS_REGION }}
+      SURFACE_ERROR_AWS_SECRET_ACCESS_KEY: ${{ secrets.SURFACE_ERROR_AWS_SECRET_ACCESS_KEY }}
+      SURFACE_ERROR_AWS_AVATAR_BUCKET: ${{ secrets.SURFACE_ERROR_AWS_AVATAR_BUCKET}}
+      SURFACE_ERROR_GOOGLE_MAPS_BACKEND_KEY: ${{ secrets.SURFACE_ERROR_GOOGLE_MAPS_BACKEND_KEY}}
+      SURFACE_ERROR_GOOGLE_MAPS_FRONTEND_KEY: ${{ secrets.SURFACE_ERROR_GOOGLE_MAPS_FRONTEND_KEY}}
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
+      - uses: actions/checkout@v2
+      - name: Copy env.sample
+        run: |
+          cp .env.sample .env
+          mkdir screenshots
+
+      - name: Install Elixir
+        id: setup-beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "24.2.1"
+          elixir-version: "1.13.3"
+
+      - name: Install node
+        uses: actions/setup-node@v2
+        id: setup-node
+        with:
+          node-version: "16.3.0"
+
+      - name: Restore dependency/build cache 🗃️
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          # cache key is hierarchical: OS, otp-version, elixir-version, mix.lock
+          # we avoid sharing this cache with other step as we are not creating PLTs here
+          #   it would override the cache with _build without PLTs and slow down the build job
+          key: ${{ runner.os }}-mix-int-test-${{ steps.setup-beam.outputs.otp-version }}-${{ steps.setup-beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+          # restore keys are tried on cache misses, and only match the key prefix
+          restore-keys: |
+            ${{ runner.os }}-mix-int-test-${{ steps.setup-beam.outputs.otp-version }}-${{ steps.setup-beam.outputs.elixir-version }}-
+            ${{ runner.os }}-mix-int-test-${{ steps.setup-beam.outputs.otp-version }}-
+            ${{ runner.os }}-mix-int-test-
+
+      - name: Cache node modules
+        uses: actions/cache@v2
+        with:
+          # npm cache files are stored in `~/.npm` on Linux/macOS
+          path: |
+            ~/.npm
+            ~/.cache/Cypress
+          # cache key is hierarchical: OS, node-version, package-lock.json
+          key: ${{ runner.os }}-build-${{steps.setup_node.outputs.node-version}}-${{ hashFiles('**/package-lock.json') }}
+          # restore keys are tried on cache misses, and only match the key prefix
+          restore-keys: |
+            ${{ runner.os }}-build-${{steps.setup_node.outputs.node-version}}-
+            ${{ runner.os }}-build-
+
+      - name: Install Dependencies
+        run: |
+          mix deps.get && npm install --prefix assets
+
+      - name: Compile app
+        run: mix compile
+
+      - name: Compile js assets
+        run: |
+          mix assets.deploy
+
+      - name: Setup int test app
+        run: |
+          mix ecto.setup
+
+      - name: Run Elixir Integration Tests
+        run: |
+          set +e
+          mix test --only integration_test
+
+      - name: Run Cypress Integration Tests
+        run: |
+          set +e
+          mix phx.server & npm run cypress:ci --prefix assets
+
+      - name: Archive test artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: cypress-test-results
+          path: |
+            assets/cypress/videos/**/*.mp4
+            assets/cypress/screenshots/**
+          retention-days: 2
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [int_test, build]
+    if: github.ref == 'refs/heads/main'
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: main # Check out main instead of the latest commit
+          fetch-depth: 0 # Checkout the whole branch
+
+      - uses: superfly/flyctl-actions@1.1
+        with:
+          args: "deploy --local-only -c fly.production.toml"
